@@ -1,0 +1,224 @@
+---
+title: "Ontario Apartment Rental Prices"
+author: "Naftal Teddy Kerecha"
+date: "February 21, 2020"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+always_allow_html: yes
+---
+**LOAD NECESSARY PACKAGES**
+```{r comment = NA,message =FALSE,warning = FALSE}
+#install.packages('tidyverse')
+#install.packages('plotly')
+#install.packages('leaflet')
+library(tidyverse)
+library(plotly)
+library(leaflet)
+```
+**IMPORT THE DATASET**
+```{r comment = NA,echo = TRUE}
+#Import and display first 6 rows of the Ontario rental prices in 2018
+rental_prices <- read.csv("Ontario_Apartment_Rentals_2018.csv", header=TRUE)
+head(rental_prices)
+```
+```{r comment = NA,echo = TRUE}
+# Display the last 6 rows of data in the Ontario rent prices dataset 
+tail(rental_prices,comment = NA)
+```
+
+
+<p>**SUMMARY AND ANALYSIS**</p>
+<p>**PRICE**</p>
+```{r comment = NA,echo = TRUE}
+summ_price <- c(summary(rental_prices$Price))
+cat(sprintf("Summary of Price variable: \n
+Min: %12.2f\t1st-Qu: %9.2f\tMedian: %9.2f\nMean: %11.2f\t3rd-Qu: %9.2f\tMax: %12.2f\n
+",summ_price[1],summ_price[2],summ_price[3],summ_price[4],summ_price[5]
+,summ_price[6]))
+```
+```{r, echo=TRUE}
+ggplot(rental_prices) + geom_histogram(mapping = aes(x = Price),binwidth = 200,color = 'blue',fill = 'white',alpha = 0)
+```
+<p>
+The price variable has a very large range with a maximum of $535,000 and a minimum of $65.
+From the graph we can note that the Price variable contains outliers that cause the data to be right skewed with an extremely long tail. The large outliers result in wider axis intervals that make it hard to observe and identify the trends in the data.
+Inorder us to create more detailed visualizations we would have to remove these extreme outlier observations from the data.
+</p>
+```{r comment = NA,echo = TRUE}
+#filter data to remove outliers 
+price_IQR <- (summ_price[2]+summ_price[5])/2
+price_outlier_value_up <- summ_price[5] + 3*price_IQR
+price_adj <- filter(rental_prices, Price <= price_outlier_value_up)
+removed<- filter(rental_prices, Price > price_outlier_value_up)
+```
+
+```{r comment = NA}
+#View some of the removed observations 
+removed
+```
+<p>
+Some of the extreme price outlier observations that we removed had prices values as large as $535000 which are very unlikely to be monthly rental prices. A likely explanation may be that these values represent the sale prices of the houses as opposed to their rental prices. These extreme outliers may also be as a result of incorrect data entry.
+</p>
+```{r comment = NA}
+#Mean with the removed outliers 
+new_summ_price <- c(summary(price_adj$Price))
+cat(sprintf("Summary of Price variable: \n
+Min: %12.2f\t1st-Qu: %9.2f\tMedian: %9.2f\nMean: %11.2f\t3rd-Qu: %9.2f\tMax: %12.2f\n
+",new_summ_price[1],new_summ_price[2],new_summ_price[3],new_summ_price[4],new_summ_price[5]
+,new_summ_price[6]))
+```
+<p>
+The initial mean of the Price variable before removal of the outliers was 3627.91 however after we remove the outliers the mean price changes to 2168.12 . There were also drastic changes to the range of the mean from [65,535000] to [65.00,8000.00]. The new range seems a lot more in line with what you would expect as rental fees in urban areas.
+We could visualize this to get a better idea of how the data is spread.
+</p>
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) + geom_histogram(mapping = aes(x = Price),binwidth = 200,color = 'blue',fill = 'white',alpha = 0)
+```
+<p>
+The Price variable seems to follow a lognormal distribution. More than 50% of the apartments in Ontario fall in the range of [1600 - 2400]. Some of the values are belw $200 which seems unlikely however an explanation for this may be that the apartments are heavilly subsidized by the government resulting in low rental costs. The lognormal distribution is right skewed and in our case still has a long tail which may represent apartments that have say 3 bedrooms and are located in large cities such as Toronto.
+</p>
+```{r comment = NA,echo = TRUE,inlude = TRUE}
+#Dataframe containing the longitude,latitude and price of the apartments in the dataset 
+long_lat <- select(price_adj,Longitude,Latitude,Price)
+# Leaflet map of the various locations of the apartment 
+ontario_apartments <- leaflet(long_lat) %>%
+   addTiles() %>% 
+   addAwesomeMarkers(lng = long_lat$Longitude ,lat = long_lat$Latitude,
+   label = sprintf("%.2f",long_lat$Price))
+ontario_apartments
+```
+<p>
+This helps us notice the fact that most of the apartments in the dataset are located in major cities such as Toronto,Markham and Missassauga which can explain the fact that as nted before most of the prices of the apartments lie in the range $1600 to 2400.
+</p>
+
+**DEN**
+```{r comment = NA}
+den_values <- factor(rental_prices$Den)
+den_values_list<- c(levels(den_values))
+den_values_dist <- c(summary(den_values))
+cat(sprintf("The only values that Den variable can take on are: %s and %s\t
+The number of observations for each of the Den values are: \t
+\t%s : %s observations \t
+\t%s : %s observations",den_values_list[1],den_values_list[2],den_values_list[1],den_values_dist[1],den_values_list[2],den_values_dist[2]))
+```
+
+From the data we can tell there are a lot more apartments without dens than those with dens. The apartments with dens make up less than 16% of the apartments provided in the dataset.
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) + 
+           geom_bar(mapping = aes(x = Bedrooms,fill = factor(Dens)),position = 'dodge')+
+           xlab("Bedrooms") +
+           ylab("Number of Apartments") + 
+            ggtitle("Bedroom vs Number of Apartments")
+```
+<p>
+The bar chart shows the distribution of the bedrooms in  the dataset and whether they had dens. We can observe that only the apartments with one bedroom have dens whereas the two and three bedroom apartments do not. 
+We would like to check what kind of impact the presence or abscence of a den has on the rental price of the apartment.
+</p>
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) +
+  geom_boxplot(mapping = aes(x = factor(Dens),y = Price)) +
+  xlab("Dens") +
+  ylab("Price of Apartment") + 
+  ggtitle("Den Vs Price")
+```
+<p>
+The apartments without dens have 1729.25 as lower quartile prices,2500.00 as the upper quartile price and median of 2050.00. Those with dens have 2000 for the lower quartile,2437.00 as the upper quartile and median of 2300. One of the major differences is the lower fence which may be attributed to the locations of the apartments. Overall since the apartments with dens are only one bedroom then we can't really use dens to determine the price of apartments.
+</p>
+```{r comment = NA}
+price_den_corr <- cor(price_adj$Price,price_adj$Dens)
+price_den_corr
+```
+<p>
+Since the den variable takes on only two variables: 0 and 1 then we can essentially treat it as a dummy variable and find its correlation to the price variable. The result is 0.04384 which indicates that there is a very weak linear relationship. The den variable thus cannot be considered as a major factor in determining the price of apartments, which is in line with our conclusions above.
+</p>
+
+
+**DEN VS PRICE**
+
+We would like to examine if the mean rental prices in Ontario for appartments with dens is greater than the mean rental prices of apartments with no dens
+
+In this case we can have our null and alternative hypothesis as follows:- 
+
+      Null Hypothesis : Mean rental prices of apartments with dens is equal to mean rental prices of apartments with no dens [Mean rental prices(with dens) = Mean rental prices(with no dens)]
+  
+      Alternative Hypothesis : Mean rental prices of apartments with dens is greater than the mean rental prices of apartments with no dens  [Mean rental prices(with dens) > Mean rental prices(with no dens)
+
+We would like to do a hypothesis test with a 0.05 significance level.
+To do this we will split the dataset into two different dataset:- 
+      With_den - Will contain apartments that have a den.
+      No_den - Will contain apartments that have no den.
+```{r}
+with_den <- filter(price_adj,price_adj$Dens == 1)
+no_den <- filter(price_adj,price_adj$Dens == 0)
+```
+
+**Hypothesis Test**
+```{r}
+t.test(with_den$Price,no_den$Price,alternative="greater",mu=0,conf.level=1-0.01)
+```
+
+The P-value that the test found is 0.01567. Since the p-value is gr than the significance level then we can conclude that we do not have sufficient evidence to reject the null hypothesis in favour of the alternative hypothesis.
+This means there doesn't exist a difference between the mean rental prices of apartments with dens and without dens.
+
+The distribution of apartments with and without dens is as displayed below:- 
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) +
+  geom_boxplot(mapping = aes(x = factor(Dens),y = Price)) +
+  xlab("Dens") +
+  ylab("Price of Apartment") + 
+  ggtitle("Den Vs Price")
+
+```
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) + 
+           geom_bar(mapping = aes(x = Bedrooms,fill = factor(Dens)),position = 'dodge')+
+           xlab("Bedrooms") +
+           ylab("Number of Apartments") + 
+            ggtitle("Bedroom vs Number of Apartments")
+```
+The bar chart shows the distribution of the number of bedrooms in the dataset and whether they had dens. We can observe that only the apartments with one bedroom have dens whereas the two and three bedroom apartments do not. 
+We would like to check what kind of impact the presence or abscence of a den has on the rental price of the apartment.
+
+Apartments that have a den are only those with one bedrooms and thus we can assume that the dens are added inorder to provide more room in the apartment probably in an attempt to reduce congestion.
+Much larger apartments tend to have much more room and thus have less need of a den. 
+One bedroom apartments are more commonly located in cities and in this case they may be more common in the Greater Toronto Area. Their location in such areas may be due to the large number of workers especially those who are still in the early stages of their careers and do not have large families yet, they thus do not need that much space.
+There exists a sub-stancial difference between the maximum price of apartments with dens($8000) and those without dens($3600). This difference in price can be attributed to the other factors say: number of bedrooms, locations and Sq.Ft(size of the apartment).
+
+Given that the presence of the den in the apartment COULD have an impact on the size,we can try a determine what type of impact that is i.e check whether there is a difference between the size of apartments with dens and those without.
+
+Since the apartments with dens are one bedroom apartments, then it would be rational to compare them to other one bedroom apartments as opposed to the partments with more bedrooms.This is such because apartments would be expected to have a higher square footage given that they have more rooms hence we limit our comparison to one bedroom apartments.
+
+To do this our null hypothesis and alternative hypothesis are as follows:- 
+
+      Null Hypothesis : Average Sq.Ft of apartments with dens is equal to the average Sq.Ft of one bedroomed apartments that do not have dens. [Average Square footaage(with dens ) = Avearge square footage(with no dens)]
+      Alternative Hypothesis : Average Sq.Ft of apartments with dens is not equal to the average Sq.Ft of one bedroomed apartments that do not have dens. [Average Square footaage(with dens ) != Avearge square footage(with no dens)]
+
+The distributuion of Square Foot Vs Den is as displayed below:-
+```{r comment = NA,echo = TRUE}
+ggplot(price_adj) +
+  geom_boxplot(mapping = aes(x = factor(Dens),y = Sq.Ft)) +
+  xlab("Dens") +
+  ylab("Price of Apartment") + 
+  ggtitle("Dens Vs Sq.Ft")
+
+```
+We will create the following datasets:- 
+        no_den_1_bed : Apartments with one bedroom and no den 
+        with_den : Apartments with a den and have only one bedroom
+```{r}
+no_den_1_bed <- filter(no_den,Bedrooms == 1)
+```
+
+In this case we will be counducting a two sided hypothesis test with a 0.05 significance level
+```{r}
+t.test(with_den$Sq.Ft,no_den_1_bed$Sq.Ft,alternative="two.sided",mu=0,conf.level=1-0.05)
+```
+From the result we can conclude that the we do not have sufficient information to reject the null hypothesis in favour of the alternative hypothesis.
+This ideally means that the presence of a den does not create a significant difference in the size of the apartment.
+
+```{r}
+cor(price_adj$Price,price_adj$Sq.Ft)
+```
+
